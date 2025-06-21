@@ -72,6 +72,42 @@ def compute_returns(historical_prices, list_of_momentums):
     return total_returns
 
 
+def compute_target_features(historical_prices, list_of_momentums, feature_calculator, feature_suffix):
+    # Initialize the forecast horizon
+    forecast_horizon = 1
+    # Compute forward returns by taking percentage change of close prices
+    # and shifting by the forecast horizon
+    f_returns = historical_prices.pct_change(forecast_horizon, fill_method=None)
+    f_returns = f_returns.shift(-forecast_horizon)
+    # Convert the result to a DataFrame
+    f_returns = pd.DataFrame(f_returns.unstack())
+    # Name the column based on the forecast horizon
+    name = "F_" + str(forecast_horizon) + "_d_returns"
+    f_returns.rename(columns={0: name}, inplace=True)
+    # Initialize total_returns with forward returns
+    total_returns = f_returns
+    
+    # Iterate over the list of momentum values
+    for i in list_of_momentums:   
+        # Compute returns for each momentum value
+        #feature = historical_prices.pct_change(i, fill_method=None)
+        feature = feature_calculator(historical_prices, i)
+        feature = pd.DataFrame(feature.unstack())
+        # Name the column based on the momentum value
+        name = str(i) + feature_suffix        
+        feature.rename(columns={0: name}, inplace=True)
+        # Rename columns and reset index
+        feature.rename(columns={0: name, 'level_0': 'Ticker'}, inplace=True)
+        # Merge computed feature returns with total_returns based on Ticker and Date
+        total_returns = pd.merge(total_returns, feature, left_index=True, right_index=True,how='outer')
+    
+    # Drop rows with any NaN values
+    total_returns.dropna(axis=0, how='any', inplace=True) 
+
+    # Return the computed total returns DataFrame
+    return total_returns
+
+
 def compute_BM_Perf(total_returns):
     # Compute the daily mean of all stocks. This will be our equal weighted benchmark
     daily_mean  = pd.DataFrame(total_returns.loc[:,'F_1_d_returns'].groupby(level='Date').mean())
